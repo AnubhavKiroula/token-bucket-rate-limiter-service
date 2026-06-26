@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import morgan from 'morgan';
+import checkRouter from './routes/check';
 
 const app = express();
 
@@ -8,6 +9,9 @@ app.use(express.json());
 
 // Observability/Logging middleware
 app.use(morgan('dev'));
+
+// Mount Check Rate Limit Route
+app.use('/check', checkRouter);
 
 // Health check endpoint
 // Note: Rate limiting is explicitly bypassed for health checks to prevent false negatives in monitoring systems
