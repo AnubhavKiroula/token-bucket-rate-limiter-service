@@ -77,8 +77,16 @@ describe('RateLimiter Unit Tests', () => {
 });
 
 describe('GET /check Integration Tests', () => {
+  let nowMock: number;
+
   beforeEach(() => {
+    nowMock = 1000000000;
+    jest.spyOn(Date, 'now').mockImplementation(() => nowMock);
     defaultRateLimiter.clear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should return 400 Bad Request if client key is missing', async () => {
