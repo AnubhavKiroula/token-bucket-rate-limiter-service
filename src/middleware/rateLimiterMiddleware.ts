@@ -10,8 +10,16 @@ export const defaultRateLimiter = new RateLimiter(10, 10);
 export const rateLimiterMiddleware = (limiter: RateLimiter = defaultRateLimiter) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     // 1. Identify client key (header, query param, or IP address)
-    const rawKey = req.headers['x-client-key'] || req.query.key || req.query.clientKey || req.ip || 'anonymous';
-    const key = Array.isArray(rawKey) ? rawKey[0] : String(rawKey);
+    let key = 'anonymous';
+    if (req.headers['x-client-key']) {
+      key = String(req.headers['x-client-key']);
+    } else if (req.query.key) {
+      key = String(req.query.key);
+    } else if (req.query.clientKey) {
+      key = String(req.query.clientKey);
+    } else if (req.ip) {
+      key = req.ip;
+    }
 
     // 2. Extract potential capacity & refillRate overrides from headers or query params
     const rawCapacity = req.headers['x-client-capacity'] || req.query.capacity;
