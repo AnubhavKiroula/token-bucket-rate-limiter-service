@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rate Limiter Monitoring Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-color: #090d16;
+      --card-bg: rgba(17, 25, 40, 0.65);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --glow-blue: rgba(59, 130, 246, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(239, 68, 68, 0.05) 0%, transparent 40%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 1.5rem;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-dot {
+      width: 12px;
+      height: 12px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .connection-status {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.5rem 1rem;
+      border-radius: 30px;
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .card-total::before { background-color: var(--accent-blue); }
+    .card-allowed::before { background-color: var(--accent-green); }
+    .card-denied::before { background-color: var(--accent-red); }
+
+    .card-title {
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .card-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .card-subtext {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    .grid-charts {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 1024px) {
+      .grid-charts {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-card {
+      min-height: 400px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .chart-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .chart-container {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    th {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    td {
+      font-size: 0.875rem;
+    }
+
+    .client-key {
+      font-family: monospace;
+      color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.08);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge-green {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--accent-green);
+    }
+
+    .badge-red {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--accent-red);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-container">
+        <div class="logo-dot"></div>
+        <h1>Rate Limiter Observability</h1>
+      </div>
+      <div class="connection-status" id="connectionStatus">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:#3b82f6;"></span>
+        SSE Stream Connecting...
+      </div>
+    </header>
+
+    <div class="grid-stats">
+      <div class="card card-total">
+        <div class="card-title">Total Requests Checked</div>
+        <div class="card-value" id="valTotal">0</div>
+        <div class="card-subtext">Cumulative across all instances</div>
+      </div>
+      <div class="card card-allowed">
+        <div class="card-title">Allowed Requests</div>
+        <div class="card-value" id="valAllowed">0</div>
+        <div class="card-subtext" id="pctAllowed">0% of total traffic</div>
+      </div>
+      <div class="card card-denied">
+        <div class="card-title">Denied Requests (429)</div>
+        <div class="card-value" id="valDenied">0</div>
+        <div class="card-subtext" id="pctDenied">0% of total traffic</div>
+      </div>
+    </div>
+
+    <div class="grid-charts">
+      <div class="card chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Real-Time Throughput (Last 30 Seconds)</div>
+        </div>
+        <div class="chart-container">
+          <canvas id="liveChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Active Clients Metrics</div>
+        </div>
+        <div style="overflow-x: auto; flex: 1;">
+          <table id="clientTable">
+            <thead>
+              <tr>
+                <th>Client Key</th>
+                <th>Total</th>
+                <th>Allowed</th>
+                <th>Denied</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" style="text-align: center; color: var(--text-muted);">No client traffic detected.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const connectionStatus = document.getElementById('connectionStatus');
+    const valTotal = document.getElementById('valTotal');
+    const valAllowed = document.getElementById('valAllowed');
+    const valDenied = document.getElementById('valDenied');
+    const pctAllowed = document.getElementById('pctAllowed');
+    const pctDenied = document.getElementById('pctDenied');
+    const clientTableBody = document.querySelector('#clientTable tbody');
+
+    // 1. Initialize Chart.js
+    const ctx = document.getElementById('liveChart').getContext('2d');
+    const chartData = {
+      labels: [],
+      datasets: [
+        {
+          label: 'Allowed Requests',
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          data: [],
+          fill: true,
+          tension: 0.4
+        },
+        {
+          label: 'Denied Requests (429)',
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          data: [],
+          fill: true,
+          tension: 0.4
+        }
+      ]
+    };
+
+    const liveChart = new Chart(ctx, {
+      type: 'line',
+      data: chartData,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+            ticks: { color: '#9ca3af' }
+          },
+          y: {
+            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+            ticks: { color: '#9ca3af', stepSize: 1 },
+            suggestedMin: 0
+          }
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#f3f4f6', font: { family: 'Inter' } }
+          }
+        }
+      }
+    });
+
+    // 2. Open Server-Sent Events (SSE) Stream
+    // The browser automatically attaches authorization credentials cached from basicAuth
+    const eventSource = new EventSource('/admin/stats/live');
+    let lastTotal = 0;
+    let lastAllowed = 0;
+    let lastDenied = 0;
+
+    eventSource.onopen = () => {
+      connectionStatus.innerHTML = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:#10b981; box-shadow: 0 0 8px #10b981;"></span> Live Stream Connected';
+      connectionStatus.style.color = '#10b981';
+    };
+
+    eventSource.onerror = () => {
+      connectionStatus.innerHTML = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:#ef4444; box-shadow: 0 0 8px #ef4444;"></span> Stream Disconnected';
+      connectionStatus.style.color = '#ef4444';
+    };
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      // A. Update Grid Metrics
+      valTotal.innerText = data.total.toLocaleString();
+      valAllowed.innerText = data.allowed.toLocaleString();
+      valDenied.innerText = data.denied.toLocaleString();
+
+      const pAllowed = data.total > 0 ? ((data.allowed / data.total) * 100).toFixed(1) : '0.0';
+      const pDenied = data.total > 0 ? ((data.denied / data.total) * 100).toFixed(1) : '0.0';
+      pctAllowed.innerText = `${pAllowed}% of total traffic`;
+      pctDenied.innerText = `${pDenied}% of total traffic`;
+
+      // B. Update Live Chart (Diff from last second to get requests/sec)
+      const diffAllowed = data.allowed - lastAllowed;
+      const diffDenied = data.denied - lastDenied;
+
+      lastTotal = data.total;
+      lastAllowed = data.allowed;
+      lastDenied = data.denied;
+
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      // Keep only last 30 data points (30 seconds)
+      if (liveChart.data.labels.length >= 30) {
+        liveChart.data.labels.shift();
+        liveChart.data.datasets[0].data.shift();
+        liveChart.data.datasets[1].data.shift();
+      }
+
+      liveChart.data.labels.push(nowStr);
+      liveChart.data.datasets[0].data.push(diffAllowed);
+      liveChart.data.datasets[1].data.push(diffDenied);
+      liveChart.update('none'); // Update without full recalculation transition for smooth flow
+
+      // C. Update Client Table
+      updateClientTable(data.clients);
+    };
+
+    function updateClientTable(clients) {
+      clientTableBody.innerHTML = '';
+      const clientKeys = Object.keys(clients);
+
+      if (clientKeys.length === 0) {
+        clientTableBody.innerHTML = `
+          <tr>
+            <td colspan="4" style="text-align: center; color: var(--text-muted);">No client traffic detected.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      // Sort clients by total requests descending
+      clientKeys.sort((a, b) => clients[b].total - clients[a].total);
+
+      clientKeys.forEach(key => {
+        const client = clients[key];
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><span class="client-key">${escapeHtml(key)}</span></td>
+          <td><strong>${client.total.toLocaleString()}</strong></td>
+          <td><span class="badge badge-green">${client.allowed.toLocaleString()}</span></td>
+          <td><span class="badge badge-red">${client.denied.toLocaleString()}</span></td>
+        `;
+        clientTableBody.appendChild(row);
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
