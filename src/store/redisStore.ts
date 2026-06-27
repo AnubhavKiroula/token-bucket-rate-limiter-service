@@ -56,7 +56,16 @@ export class RedisStore {
 
   constructor() {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    this.client = createClient({ url: redisUrl });
+    this.client = createClient({
+      url: redisUrl,
+      socket: {
+        // In test environments, fail connection immediately without retrying to avoid hanging Jest.
+        // In production, retry with a progressive backoff capped at 3 seconds.
+        reconnectStrategy: process.env.NODE_ENV === 'test' 
+          ? false 
+          : (retries) => Math.min(retries * 100, 3000)
+      }
+    });
 
     this.client.on('connect', () => {
       console.log(JSON.stringify({ level: 'info', event: 'redis_connecting', message: 'Connecting to Redis server...' }));
