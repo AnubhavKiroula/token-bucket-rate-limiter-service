@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import path from 'path';
 import { redisStore } from '../store/redisStore';
 
 const router = Router();
@@ -110,6 +111,13 @@ router.get('/stats/live', (req: Request, res: Response): void => {
     clearInterval(intervalId);
     res.end();
   });
+});
+
+/**
+ * Serve the monitoring dashboard HTML.
+ */
+router.get('/dashboard', (req: Request, res: Response): void => {
+  res.sendFile(path.join(__dirname, '../views/dashboard.html'));
 });
 
 export default router;
