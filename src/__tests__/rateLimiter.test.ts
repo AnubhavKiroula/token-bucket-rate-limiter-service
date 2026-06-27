@@ -9,6 +9,11 @@ import { redisStore } from '../store/redisStore';
 jest.mock('../store/redisStore', () => {
   const mockConfigs = new Map<string, { capacity: number; refillRate: number }>();
   const mockBuckets = new Map<string, { tokens: number; lastRefillTime: number }>();
+  
+  const mockGlobalStats = { total: 0, allowed: 0, denied: 0 };
+  const mockClientTotals = new Map<string, number>();
+  const mockClientAllowed = new Map<string, number>();
+  const mockClientDenied = new Map<string, number>();
 
   return {
     redisStore: {
@@ -52,13 +57,56 @@ jest.mock('../store/redisStore', () => {
           };
         }
       ),
+      recordDecision: jest.fn().mockImplementation(async (key: string, allowed: boolean) => {
+        mockGlobalStats.total += 1;
+        if (allowed) {
+          mockGlobalStats.allowed += 1;
+        } else {
+          mockGlobalStats.denied += 1;
+        }
+
+        mockClientTotals.set(key, (mockClientTotals.get(key) || 0) + 1);
+        if (allowed) {
+          mockClientAllowed.set(key, (mockClientAllowed.get(key) || 0) + 1);
+        } else {
+          mockClientDenied.set(key, (mockClientDenied.get(key) || 0) + 1);
+        }
+      }),
+      getMetrics: jest.fn().mockImplementation(async () => {
+        const clients: Record<string, { total: number; allowed: number; denied: number }> = {};
+        for (const clientKey of mockClientTotals.keys()) {
+          clients[clientKey] = {
+            total: mockClientTotals.get(clientKey) || 0,
+            allowed: mockClientAllowed.get(clientKey) || 0,
+            denied: mockClientDenied.get(clientKey) || 0,
+          };
+        }
+        return {
+          total: mockGlobalStats.total,
+          allowed: mockGlobalStats.allowed,
+          denied: mockGlobalStats.denied,
+          clients,
+        };
+      }),
       clearMocks: () => {
         mockConfigs.clear();
         mockBuckets.clear();
+        mockGlobalStats.total = 0;
+        mockGlobalStats.allowed = 0;
+        mockGlobalStats.denied = 0;
+        mockClientTotals.clear();
+        mockClientAllowed.clear();
+        mockClientDenied.clear();
       },
       flushAll: jest.fn().mockImplementation(async () => {
         mockConfigs.clear();
         mockBuckets.clear();
+        mockGlobalStats.total = 0;
+        mockGlobalStats.allowed = 0;
+        mockGlobalStats.denied = 0;
+        mockClientTotals.clear();
+        mockClientAllowed.clear();
+        mockClientDenied.clear();
       })
     },
   };
