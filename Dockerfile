@@ -10,6 +10,7 @@ RUN npm ci
 # Copy TypeScript configs and source code
 COPY tsconfig.json ./
 COPY src ./src
+COPY scripts ./scripts
 
 # Build production bundle
 RUN npm run build
