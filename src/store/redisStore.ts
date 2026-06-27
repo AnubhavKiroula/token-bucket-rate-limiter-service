@@ -167,6 +167,53 @@ export class RedisStore {
   }
 
   /**
+   * Record rate limit decisions for metrics and monitoring.
+   */
+  public async recordDecision(key: string, allowed: boolean): Promise<void> {
+    const multi = this.client.multi();
+    // Global counters
+    multi.hIncrBy('stats:global', 'total', 1);
+    multi.hIncrBy('stats:global', allowed ? 'allowed' : 'denied', 1);
+
+    // Client-specific counters
+    multi.hIncrBy('stats:clients:total', key, 1);
+    multi.hIncrBy(allowed ? 'stats:clients:allowed' : 'stats:clients:denied', key, 1);
+
+    await multi.exec();
+  }
+
+  /**
+   * Fetch all accumulated metrics for real-time monitoring and Prometheus.
+   */
+  public async getMetrics(): Promise<any> {
+    const globalData = await this.client.hGetAll('stats:global');
+    const clientsTotal = await this.client.hGetAll('stats:clients:total');
+    const clientsAllowed = await this.client.hGetAll('stats:clients:allowed');
+    const clientsDenied = await this.client.hGetAll('stats:clients:denied');
+
+    const total = parseInt(globalData.total || '0', 10);
+    const allowed = parseInt(globalData.allowed || '0', 10);
+    const denied = parseInt(globalData.denied || '0', 10);
+
+    const clients: Record<string, { total: number; allowed: number; denied: number }> = {};
+
+    for (const clientKey of Object.keys(clientsTotal)) {
+      clients[clientKey] = {
+        total: parseInt(clientsTotal[clientKey] || '0', 10),
+        allowed: parseInt(clientsAllowed[clientKey] || '0', 10),
+        denied: parseInt(clientsDenied[clientKey] || '0', 10),
+      };
+    }
+
+    return {
+      total,
+      allowed,
+      denied,
+      clients,
+    };
+  }
+
+  /**
    * Clear all database data (useful for integration tests)
    */
   public async flushAll(): Promise<void> {
