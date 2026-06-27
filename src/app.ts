@@ -13,6 +13,13 @@ app.use(morgan('dev'));
 // Mount Check Rate Limit Route
 app.use('/check', checkRouter);
 
+// Import admin security and routes
+import { basicAuth } from './middleware/basicAuth';
+import adminRouter from './routes/admin';
+
+// Mount Admin Configurations (protected by HTTP Basic Auth)
+app.use('/admin', basicAuth, adminRouter);
+
 // Health check endpoint
 // Note: Rate limiting is explicitly bypassed for health checks to prevent false negatives in monitoring systems
 app.get('/health', (req: Request, res: Response) => {
