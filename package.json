@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "rimraf dist && tsc",
+    "build": "rimraf dist && tsc && node scripts/copy-assets.js",
     "test": "jest",
     "test:load": "artillery run --output load-report.json artillery.yml"
   },
