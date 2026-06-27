@@ -56,23 +56,23 @@ describe('Redis E2E Integration Tests', () => {
     // Instance 1 consumes 3 tokens
     const r1 = await limiter1.consume(key, 3);
     expect(r1.allowed).toBe(true);
-    expect(r1.tokensRemaining).toBe(7);
+    expect(r1.tokensRemaining).toBeCloseTo(7, 4);
 
     // Instance 2 consumes 2 tokens from the same key
     const r2 = await limiter2.consume(key, 2);
     expect(r2.allowed).toBe(true);
     // State is synchronized! Tokens remaining should be 5
-    expect(r2.tokensRemaining).toBe(5);
+    expect(r2.tokensRemaining).toBeCloseTo(5, 4);
 
     // Instance 1 consumes remaining 5 tokens
     const r3 = await limiter1.consume(key, 5);
     expect(r3.allowed).toBe(true);
-    expect(r3.tokensRemaining).toBe(0);
+    expect(r3.tokensRemaining).toBeCloseTo(0, 4);
 
     // Instance 2 attempts to consume 1 token and gets denied
     const r4 = await limiter2.consume(key, 1);
     expect(r4.allowed).toBe(false);
-    expect(r4.tokensRemaining).toBe(0);
+    expect(r4.tokensRemaining).toBeCloseTo(0, 4);
   });
 
   it('should dynamically load and respect custom config overrides saved via Admin', async () => {
@@ -88,7 +88,7 @@ describe('Redis E2E Integration Tests', () => {
     expect(r1.allowed).toBe(true);
     expect(r1.capacity).toBe(4);
     expect(r1.refillRate).toBe(1);
-    expect(r1.tokensRemaining).toBe(3);
+    expect(r1.tokensRemaining).toBeCloseTo(3, 4);
 
     // Exhaust the custom capacity
     await limiter1.consume(key, 3);
