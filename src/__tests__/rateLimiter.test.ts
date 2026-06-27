@@ -2,15 +2,76 @@ import request from 'supertest';
 import { RateLimiter } from '../rateLimiter';
 import app from '../app';
 import { defaultRateLimiter } from '../middleware/rateLimiterMiddleware';
+import { redisStore } from '../store/redisStore';
+
+// Mock Redis Store so that unit and endpoint tests run deterministically and offline
+jest.mock('../store/redisStore', () => {
+  const mockConfigs = new Map<string, { capacity: number; refillRate: number }>();
+  const mockBuckets = new Map<string, { tokens: number; lastRefillTime: number }>();
+
+  return {
+    redisStore: {
+      connect: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn().mockResolvedValue(undefined),
+      getClientLimitConfig: jest.fn().mockImplementation(async (key: string) => {
+        return mockConfigs.get(key) || null;
+      }),
+      saveClientLimitConfig: jest.fn().mockImplementation(async (key: string, capacity: number, refillRate: number) => {
+        mockConfigs.set(key, { capacity, refillRate });
+      }),
+      consumeToken: jest.fn().mockImplementation(
+        async (key: string, tokensToConsume: number, refillRate: number, capacity: number, now: number) => {
+          let bucket = mockBuckets.get(key);
+          if (!bucket) {
+            bucket = {
+              tokens: capacity,
+              lastRefillTime: now,
+            };
+          } else {
+            const elapsedTimeMs = now - bucket.lastRefillTime;
+            if (elapsedTimeMs > 0) {
+              const tokensToAdd = elapsedTimeMs * (refillRate / 1000.0);
+              bucket.tokens = Math.min(capacity, bucket.tokens + tokensToAdd);
+              bucket.lastRefillTime = now;
+            }
+          }
+
+          let allowed = false;
+          if (bucket.tokens >= tokensToConsume) {
+            bucket.tokens -= tokensToConsume;
+            allowed = true;
+          }
+
+          mockBuckets.set(key, bucket);
+
+          return {
+            allowed,
+            tokensRemaining: bucket.tokens,
+            lastRefillTimeMs: bucket.lastRefillTime,
+          };
+        }
+      ),
+      clearMocks: () => {
+        mockConfigs.clear();
+        mockBuckets.clear();
+      },
+      flushAll: jest.fn().mockImplementation(async () => {
+        mockConfigs.clear();
+        mockBuckets.clear();
+      })
+    },
+  };
+});
 
 describe('RateLimiter Unit Tests', () => {
   let limiter: RateLimiter;
   let nowMock: number;
 
   beforeEach(() => {
-    nowMock = 1000000000; // Fixed start time (Unix epoch ms)
+    // Reset mocked storage
+    (redisStore as any).clearMocks();
+    nowMock = 1000000000; // Fixed start time
     jest.spyOn(Date, 'now').mockImplementation(() => nowMock);
-    // Limiter: 2 tokens per second, capacity (burst) of 5
     limiter = new RateLimiter(2, 5);
   });
 
@@ -18,61 +79,55 @@ describe('RateLimiter Unit Tests', () => {
     jest.restoreAllMocks();
   });
 
-  it('should initialize at full capacity and consume tokens', () => {
-    const result1 = limiter.consume('client1', 1);
+  it('should initialize at full capacity and consume tokens', async () => {
+    const result1 = await limiter.consume('client1', 1);
     expect(result1.allowed).toBe(true);
     expect(result1.tokensRemaining).toBe(4);
     expect(result1.capacity).toBe(5);
 
-    const result2 = limiter.consume('client1', 3);
+    const result2 = await limiter.consume('client1', 3);
     expect(result2.allowed).toBe(true);
     expect(result2.tokensRemaining).toBe(1);
   });
 
-  it('should deny consumption once bucket is exhausted', () => {
-    // Consume all 5 tokens
-    const result1 = limiter.consume('client1', 5);
+  it('should deny consumption once bucket is exhausted', async () => {
+    const result1 = await limiter.consume('client1', 5);
     expect(result1.allowed).toBe(true);
     expect(result1.tokensRemaining).toBe(0);
 
-    // Consume another one
-    const result2 = limiter.consume('client1', 1);
+    const result2 = await limiter.consume('client1', 1);
     expect(result2.allowed).toBe(false);
     expect(result2.tokensRemaining).toBe(0);
   });
 
-  it('should refill tokens smoothly over elapsed time', () => {
-    // Consume 5 tokens
-    limiter.consume('client1', 5);
+  it('should refill tokens smoothly over elapsed time', async () => {
+    await limiter.consume('client1', 5);
 
-    // Advance mock time by 1 second (1000ms).
-    // With refillRate = 2/sec, we expect 2 tokens to replenish.
+    // Advance mock time by 1 second (refill 2 tokens)
     nowMock += 1000;
 
-    const result = limiter.consume('client1', 1);
+    const result = await limiter.consume('client1', 1);
     expect(result.allowed).toBe(true);
-    // Initial: 5 -> after consume: 0 -> after 1s refill: 2 -> after consume 1: 1 token remaining
     expect(result.tokensRemaining).toBe(1);
   });
 
-  it('should not exceed burst capacity limit during refill', () => {
-    limiter.consume('client1', 1); // 4 remaining
+  it('should not exceed burst capacity limit during refill', async () => {
+    await limiter.consume('client1', 1); // 4 remaining
     
-    // Advance mock time by 10 seconds (should refill 20 tokens, but capacity is capped at 5)
+    // Advance mock time by 10 seconds (cap at capacity 5)
     nowMock += 10000;
 
-    const result = limiter.consume('client1', 1);
+    const result = await limiter.consume('client1', 1);
     expect(result.allowed).toBe(true);
-    expect(result.tokensRemaining).toBe(4); // Capped at 5, consumed 1 -> 4
+    expect(result.tokensRemaining).toBe(4);
   });
 
-  it('should respect custom capacity and refillRate overrides', () => {
-    // Consume with custom capacity 10 and refill rate 5
-    const result = limiter.consume('client1', 1, 5, 10);
+  it('should respect custom capacity and refillRate overrides', async () => {
+    const result = await limiter.consume('client1', 1, 5, 10);
     expect(result.allowed).toBe(true);
     expect(result.capacity).toBe(10);
     expect(result.refillRate).toBe(5);
-    expect(result.tokensRemaining).toBe(9); // Initial 10 - 1 = 9
+    expect(result.tokensRemaining).toBe(9);
   });
 });
 
@@ -80,9 +135,9 @@ describe('GET /check Integration Tests', () => {
   let nowMock: number;
 
   beforeEach(() => {
+    (redisStore as any).clearMocks();
     nowMock = 1000000000;
     jest.spyOn(Date, 'now').mockImplementation(() => nowMock);
-    defaultRateLimiter.clear();
   });
 
   afterEach(() => {
@@ -116,12 +171,10 @@ describe('GET /check Integration Tests', () => {
   });
 
   it('should return DENY when request rate is exceeded', async () => {
-    // Default rate limit capacity is 10. Perform 10 requests to empty bucket.
     for (let i = 0; i < 10; i++) {
       await request(app).get('/check?key=limit_test');
     }
 
-    // The 11th request must be denied
     const response = await request(app)
       .get('/check?key=limit_test')
       .expect(200);
@@ -131,7 +184,6 @@ describe('GET /check Integration Tests', () => {
   });
 
   it('should support override configurations via query parameters', async () => {
-    // Custom capacity of 2
     const response1 = await request(app).get('/check?key=override_test&capacity=2');
     expect(response1.headers['x-ratelimit-limit']).toBe('2');
     expect(response1.body.tokensRemaining).toBe(1);

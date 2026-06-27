@@ -9,9 +9,10 @@ A standalone, production-ready backend service implementing a highly performant 
 - **Runtime Environment**: Node.js (v22.x)
 - **Programming Language**: TypeScript
 - **Web Framework**: Express
-- **Logging / Observability**: Morgan
+- **Persistence Store**: Redis (using atomic Lua scripts)
+- **Logging / Observability**: Structured JSON logging (Morgan for development HTTP, JSON format for runtime events)
 - **Testing Framework**: Jest & Supertest
-- **Containerization**: Docker (planned for future phases)
+- **Containerization**: Docker & Docker Compose
 
 ---
 
@@ -21,12 +22,13 @@ A standalone, production-ready backend service implementing a highly performant 
   - Initialize Node.js, TypeScript, Express, Jest configuration.
   - Implement health check endpoint with logger.
   - Setup CI/CD build & test verification workflows.
-- [ ] **Phase 2: Core Rate Limiting Implementation**
+- [x] **Phase 2: Core Rate Limiting Implementation**
   - Implement in-memory token bucket rate limiter.
   - Add API endpoints and middleware to apply limits to request paths.
-- [ ] **Phase 3: Persistence and Distributed Safety**
+- [x] **Phase 3: Persistence and Distributed Safety**
   - Integrate Redis for multi-instance distributed token bucket synchronization.
-  - Ensure thread/concurrency safety (atomic Redis operations).
+  - Ensure thread/concurrency safety (atomic Redis operations via Lua scripting).
+  - Implement Basic-Auth-secured `/admin/config` endpoint to persist client-specific overrides.
 - [ ] **Phase 4: Load Testing & Performance Optimization**
   - Configure load testing tools (e.g., Artillery, autocannon).
   - Benchmark performance and optimize throughput.
@@ -36,7 +38,7 @@ A standalone, production-ready backend service implementing a highly performant 
 ## 🚀 Getting Started
 
 ### Prerequisites
-Make sure you have [Node.js](https://nodejs.org/) (v20+ recommended) and npm installed.
+Make sure you have [Node.js](https://nodejs.org/) (v20+ recommended), npm, and [Docker](https://www.docker.com/) installed.
 
 ### Installation
 1. Clone the repository:
@@ -50,18 +52,21 @@ Make sure you have [Node.js](https://nodejs.org/) (v20+ recommended) and npm ins
    ```
 
 ### Running the App
-- **Development Mode** (with hot reloading via `ts-node-dev`):
+- **Development Mode** (requires a local Redis running on port `6379`, with hot reloading via `ts-node-dev`):
   ```bash
   npm run dev
   ```
-- **Production Build**:
-  Compile TypeScript to JS:
+- **Production Build** (compiles TypeScript):
   ```bash
   npm run build
   ```
-  Run the compiled service:
+  Run the compiled service locally:
   ```bash
   npm start
+  ```
+- **Docker Multi-Instance Mode** (spins up Redis + `service-1` on port `3000` + `service-2` on port `3001` in a bridge network):
+  ```bash
+  docker-compose up --build
   ```
 
 ---
@@ -115,7 +120,6 @@ Query rate-limiting decisions for any client key.
 ```
 
 #### Curl Examples
-
 * **Basic Check** (Uses default 10 tokens/sec, burst 10):
   ```bash
   curl -i "http://localhost:3000/check?key=client_1"
@@ -133,12 +137,93 @@ Query rate-limiting decisions for any client key.
 
 ---
 
+### 2. Configure Client Limits (Admin Only)
+Set custom capacity and refill rate configurations for a client, persisted in Redis.
+
+* **Endpoint**: `/admin/config`
+* **Method**: `POST`
+* **Authentication**: HTTP Basic Auth (Credentials: `ADMIN_USERNAME` / `ADMIN_PASSWORD`, default: `admin` / `secret123`)
+* **Headers**:
+  * `Authorization`: `Basic <base64-credentials>`
+  * `Content-Type`: `application/json`
+
+* **Request Body**:
+  ```json
+  {
+    "key": "vip_user",
+    "capacity": 20,
+    "refillRate": 5
+  }
+  ```
+
+* **Response Body (HTTP 200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "Successfully configured rate limits for client: vip_user",
+    "config": {
+      "key": "vip_user",
+      "capacity": 20,
+      "refillRate": 5
+    }
+  }
+  ```
+
+#### Curl Example
+```bash
+curl -i -X POST -u admin:secret123 \
+  -H "Content-Type: application/json" \
+  -d '{"key": "vip_user", "capacity": 20, "refillRate": 5}' \
+  http://localhost:3000/admin/config
+```
+
+---
+
+## 👥 Multi-Instance Coordination Demo
+
+When running the application using Docker Compose, the rate limiting state is fully shared and atomic across multiple server instances thanks to our Redis backend and Lua scripting.
+
+You can verify this shared distributed rate limiting state across `service-1` (port `3000`) and `service-2` (port `3001`):
+
+1. **Configure a client** with small limits via `service-1`:
+   ```bash
+   curl -X POST -u admin:secret123 \
+     -H "Content-Type: application/json" \
+     -d '{"key": "demo-client", "capacity": 3, "refillRate": 0.1}' \
+     http://localhost:3000/admin/config
+   ```
+
+2. **Consume a token** from `service-1`:
+   ```bash
+   curl -i "http://localhost:3000/check?key=demo-client"
+   ```
+   *Expected Response Header*: `X-RateLimit-Remaining: 2` (3 capacity minus 1 consumed).
+
+3. **Consume another token** from `service-2` (representing a load-balanced target):
+   ```bash
+   curl -i "http://localhost:3001/check?key=demo-client"
+   ```
+   *Expected Response Header*: `X-RateLimit-Remaining: 1` (Shared state reflects the previous consumption).
+
+4. **Exhaust the remaining tokens** from `service-1`:
+   ```bash
+   curl -i "http://localhost:3000/check?key=demo-client"
+   ```
+   *Expected Response Header*: `X-RateLimit-Remaining: 0`.
+
+5. **Trigger rate-limiting rejection** from `service-2`:
+   ```bash
+   curl -i "http://localhost:3001/check?key=demo-client"
+   ```
+   *Expected Response*: `HTTP/1.1 200 OK` with JSON decision: `"DENY"`.
+
+---
+
 ## 🧪 Testing
 
-We use Jest along with Supertest for running integration tests on the Express app.
+We use Jest along with Supertest for running unit and mock integration tests on the Express app.
 
 To execute the test suite, run:
 ```bash
 npm test
 ```
-

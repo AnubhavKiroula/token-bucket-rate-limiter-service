@@ -1,3 +1,5 @@
+import { redisStore } from './store/redisStore';
+
 export interface ConsumeResult {
   allowed: boolean;
   tokensRemaining: number;
@@ -6,89 +8,69 @@ export interface ConsumeResult {
   resetTimeMs: number; // Epoch timestamp in ms when bucket is fully refilled
 }
 
-export interface BucketState {
-  tokens: number;
-  lastRefillTime: number; // Epoch timestamp in ms
-}
-
 export class RateLimiter {
   private defaultRefillRate: number; // tokens per second
   private defaultCapacity: number;   // max tokens
-  private buckets: Map<string, BucketState>;
 
   constructor(defaultRefillRate: number, defaultCapacity: number) {
     this.defaultRefillRate = defaultRefillRate;
     this.defaultCapacity = defaultCapacity;
-    this.buckets = new Map<string, BucketState>();
   }
 
   /**
-   * Consume tokens from a client's bucket.
+   * Consume tokens from a client's bucket asynchronously using Redis.
    * 
    * @param key Unique key representing the client (e.g., IP address or API key)
    * @param tokensToConsume Number of tokens to consume (default: 1)
    * @param customRefillRate Optional custom refill rate override (tokens/sec) for this client
    * @param customCapacity Optional custom capacity override (burst size) for this client
    */
-  public consume(
+  public async consume(
     key: string,
     tokensToConsume: number = 1,
     customRefillRate?: number,
     customCapacity?: number
-  ): ConsumeResult {
-    const now = Date.now();
-    const refillRate = customRefillRate !== undefined ? customRefillRate : this.defaultRefillRate;
-    const capacity = customCapacity !== undefined ? customCapacity : this.defaultCapacity;
+  ): Promise<ConsumeResult> {
+    let refillRate = this.defaultRefillRate;
+    let capacity = this.defaultCapacity;
 
-    // Fetch existing state or initialize a new bucket at full capacity
-    let bucket = this.buckets.get(key);
-    if (!bucket) {
-      bucket = {
-        tokens: capacity,
-        lastRefillTime: now,
-      };
+    // Resolve rate-limit config in precedence:
+    // 1. Direct custom parameters passed to consume()
+    // 2. Persistent configuration stored in Redis for this client
+    // 3. Fallback to global defaults configured in the constructor
+    if (customRefillRate !== undefined || customCapacity !== undefined) {
+      refillRate = customRefillRate !== undefined ? customRefillRate : this.defaultRefillRate;
+      capacity = customCapacity !== undefined ? customCapacity : this.defaultCapacity;
     } else {
-      // Calculate token replenishment based on time elapsed
-      const elapsedTimeMs = now - bucket.lastRefillTime;
-      const tokensToAdd = elapsedTimeMs * (refillRate / 1000);
-      bucket.tokens = Math.min(capacity, bucket.tokens + tokensToAdd);
-      bucket.lastRefillTime = now;
+      const dbConfig = await redisStore.getClientLimitConfig(key);
+      if (dbConfig) {
+        refillRate = dbConfig.refillRate;
+        capacity = dbConfig.capacity;
+      }
     }
 
-    let allowed = false;
-    if (bucket.tokens >= tokensToConsume) {
-      bucket.tokens -= tokensToConsume;
-      allowed = true;
-    }
+    const now = Date.now();
 
-    // Save updated bucket state
-    this.buckets.set(key, bucket);
+    // Call atomic Redis Lua operation
+    const result = await redisStore.consumeToken(
+      key,
+      tokensToConsume,
+      refillRate,
+      capacity,
+      now
+    );
 
     // Calculate reset time (when the bucket will be completely full again)
-    const tokensNeeded = capacity - bucket.tokens;
+    const tokensNeeded = capacity - result.tokensRemaining;
     const timeNeededMs = refillRate > 0 ? (tokensNeeded / (refillRate / 1000)) : 0;
     const resetTimeMs = Math.ceil(now + timeNeededMs);
 
     return {
-      allowed,
-      tokensRemaining: bucket.tokens,
+      allowed: result.allowed,
+      tokensRemaining: result.tokensRemaining,
       capacity,
       refillRate,
       resetTimeMs,
     };
-  }
-
-  /**
-   * Helper to inspect the current raw state of a bucket (useful for testing)
-   */
-  public getBucket(key: string): BucketState | undefined {
-    return this.buckets.get(key);
-  }
-
-  /**
-   * Helper to clear limiter state
-   */
-  public clear(): void {
-    this.buckets.clear();
   }
 }
