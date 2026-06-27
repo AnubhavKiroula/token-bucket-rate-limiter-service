@@ -1,0 +1,22 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 10
+      arrivalRate: 20
+      name: "Warm up"
+    - duration: 15
+      arrivalRate: 50
+      rampTo: 200
+      name: "Ramp up load"
+    - duration: 20
+      arrivalRate: 500
+      name: "Sustained high stress (500 rps)"
+  defaults:
+    headers:
+      User-Agent: "ArtilleryLoadTester"
+
+scenarios:
+  - name: "Rate Limiter check requests"
+    flow:
+      - get:
+          url: "/check?key=artillery-client-user"
