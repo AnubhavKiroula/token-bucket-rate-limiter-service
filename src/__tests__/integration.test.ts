@@ -15,9 +15,10 @@ describe('Redis E2E Integration Tests', () => {
       await redisStore.flushAll(); // Clean state
       isRedisAvailable = true;
 
-      // Instantiate two distinct rate limiter instances sharing the same Redis client
-      limiter1 = new RateLimiter(10, 10); // Node 1
-      limiter2 = new RateLimiter(10, 10); // Node 2
+      // Instantiate two distinct rate limiter instances sharing the same Redis client.
+      // Use a very low refill rate (0.000001/sec) to prevent real-time refills during the test.
+      limiter1 = new RateLimiter(0.000001, 10); // Node 1
+      limiter2 = new RateLimiter(0.000001, 10); // Node 2
     } catch (err) {
       console.warn('[Integration Test] Redis server not reachable at localhost:6379. Skipping Redis E2E integration tests.');
     }
