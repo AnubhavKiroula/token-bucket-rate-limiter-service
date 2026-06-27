@@ -65,6 +65,9 @@ export class RateLimiter {
     const timeNeededMs = refillRate > 0 ? (tokensNeeded / (refillRate / 1000)) : 0;
     const resetTimeMs = Math.ceil(now + timeNeededMs);
 
+    // Record decision to Redis metrics store asynchronously (fire-and-forget or awaited)
+    await redisStore.recordDecision(key, result.allowed);
+
     return {
       allowed: result.allowed,
       tokensRemaining: result.tokensRemaining,

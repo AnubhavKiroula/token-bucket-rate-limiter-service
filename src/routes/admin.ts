@@ -1,12 +1,15 @@
 import { Router, Request, Response } from 'express';
+import path from 'path';
 import { redisStore } from '../store/redisStore';
 
 const router = Router();
 
+/**
+ * Configure rate limit overrides for a specific client key.
+ */
 router.post('/config', async (req: Request, res: Response): Promise<void> => {
   const { key, capacity, refillRate } = req.body;
 
-  // Validation
   if (!key || typeof key !== 'string') {
     res.status(400).json({ error: 'Bad Request', message: 'Missing or invalid "key" field. Must be a string.' });
     return;
@@ -26,12 +29,10 @@ router.post('/config', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    // Save to Redis store
     await redisStore.saveClientLimitConfig(key, parsedCapacity, parsedRefillRate);
 
     const instanceId = process.env.INSTANCE_ID || 'localhost';
 
-    // Structured JSON log for observability
     console.log(JSON.stringify({
       level: 'info',
       event: 'admin_config_changed',
@@ -63,6 +64,60 @@ router.post('/config', async (req: Request, res: Response): Promise<void> => {
       message: 'Failed to save configuration to persistence layer.',
     });
   }
+});
+
+/**
+ * Fetch current aggregated metrics.
+ */
+router.get('/stats', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const metrics = await redisStore.getMetrics();
+    res.status(200).json(metrics);
+  } catch (err: any) {
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch rate limiter statistics.',
+    });
+  }
+});
+
+/**
+ * Server-Sent Events (SSE) stream endpoint to push real-time rate limiter telemetry.
+ */
+router.get('/stats/live', (req: Request, res: Response): void => {
+  // Establish persistent SSE connection
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendUpdate = async () => {
+    try {
+      const metrics = await redisStore.getMetrics();
+      res.write(`data: ${JSON.stringify(metrics)}\n\n`);
+    } catch (err) {
+      // Suppress metrics gathering errors in live stream
+    }
+  };
+
+  // Push immediate initial state
+  sendUpdate();
+
+  // Poll Redis and push metrics every 1000ms
+  const intervalId = setInterval(sendUpdate, 1000);
+
+  // Clean up timer on client disconnect
+  req.on('close', () => {
+    clearInterval(intervalId);
+    res.end();
+  });
+});
+
+/**
+ * Serve the monitoring dashboard HTML.
+ */
+router.get('/dashboard', (req: Request, res: Response): void => {
+  res.sendFile(path.join(__dirname, '../views/dashboard.html'));
 });
 
 export default router;

@@ -1,13 +1,19 @@
 import request from 'supertest';
+import express from 'express';
 import { RateLimiter } from '../rateLimiter';
 import app from '../app';
-import { defaultRateLimiter } from '../middleware/rateLimiterMiddleware';
+import { defaultRateLimiter, rateLimiterMiddleware } from '../middleware/rateLimiterMiddleware';
 import { redisStore } from '../store/redisStore';
 
 // Mock Redis Store so that unit and endpoint tests run deterministically and offline
 jest.mock('../store/redisStore', () => {
   const mockConfigs = new Map<string, { capacity: number; refillRate: number }>();
   const mockBuckets = new Map<string, { tokens: number; lastRefillTime: number }>();
+  
+  const mockGlobalStats = { total: 0, allowed: 0, denied: 0 };
+  const mockClientTotals = new Map<string, number>();
+  const mockClientAllowed = new Map<string, number>();
+  const mockClientDenied = new Map<string, number>();
 
   return {
     redisStore: {
@@ -51,13 +57,56 @@ jest.mock('../store/redisStore', () => {
           };
         }
       ),
+      recordDecision: jest.fn().mockImplementation(async (key: string, allowed: boolean) => {
+        mockGlobalStats.total += 1;
+        if (allowed) {
+          mockGlobalStats.allowed += 1;
+        } else {
+          mockGlobalStats.denied += 1;
+        }
+
+        mockClientTotals.set(key, (mockClientTotals.get(key) || 0) + 1);
+        if (allowed) {
+          mockClientAllowed.set(key, (mockClientAllowed.get(key) || 0) + 1);
+        } else {
+          mockClientDenied.set(key, (mockClientDenied.get(key) || 0) + 1);
+        }
+      }),
+      getMetrics: jest.fn().mockImplementation(async () => {
+        const clients: Record<string, { total: number; allowed: number; denied: number }> = {};
+        for (const clientKey of mockClientTotals.keys()) {
+          clients[clientKey] = {
+            total: mockClientTotals.get(clientKey) || 0,
+            allowed: mockClientAllowed.get(clientKey) || 0,
+            denied: mockClientDenied.get(clientKey) || 0,
+          };
+        }
+        return {
+          total: mockGlobalStats.total,
+          allowed: mockGlobalStats.allowed,
+          denied: mockGlobalStats.denied,
+          clients,
+        };
+      }),
       clearMocks: () => {
         mockConfigs.clear();
         mockBuckets.clear();
+        mockGlobalStats.total = 0;
+        mockGlobalStats.allowed = 0;
+        mockGlobalStats.denied = 0;
+        mockClientTotals.clear();
+        mockClientAllowed.clear();
+        mockClientDenied.clear();
       },
       flushAll: jest.fn().mockImplementation(async () => {
         mockConfigs.clear();
         mockBuckets.clear();
+        mockGlobalStats.total = 0;
+        mockGlobalStats.allowed = 0;
+        mockGlobalStats.denied = 0;
+        mockClientTotals.clear();
+        mockClientAllowed.clear();
+        mockClientDenied.clear();
       })
     },
   };
@@ -193,5 +242,64 @@ describe('GET /check Integration Tests', () => {
 
     const response3 = await request(app).get('/check?key=override_test&capacity=2');
     expect(response3.body.decision).toBe('DENY');
+  });
+});
+
+describe('rateLimiterMiddleware Integration Tests', () => {
+  let testApp: express.Application;
+  let testLimiter: RateLimiter;
+  let nowMock: number;
+
+  beforeEach(() => {
+    (redisStore as any).clearMocks();
+    nowMock = 1000000000;
+    jest.spyOn(Date, 'now').mockImplementation(() => nowMock);
+
+    // Limit of 2 requests, capacity 2
+    testLimiter = new RateLimiter(10, 2);
+    testApp = express();
+    testApp.use(rateLimiterMiddleware(testLimiter));
+    testApp.get('/test-route', (req, res) => {
+      res.status(200).send('success');
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should allow requests below limit and set headers', async () => {
+    const response = await request(testApp)
+      .get('/test-route?key=mw_client')
+      .expect(200);
+
+    expect(response.text).toBe('success');
+    expect(response.headers['x-ratelimit-limit']).toBe('2');
+    expect(response.headers['x-ratelimit-remaining']).toBe('1');
+    expect(response.headers['x-ratelimit-reset']).toBe('1000001'); // 1s wait
+  });
+
+  it('should return 429 with JSON body and headers when rate limit is exceeded', async () => {
+    // Request 1: consumes 1 token
+    await request(testApp).get('/test-route?key=mw_client').expect(200);
+    // Request 2: consumes 2nd token
+    await request(testApp).get('/test-route?key=mw_client').expect(200);
+    
+    // Request 3: gets blocked with 429
+    const response = await request(testApp)
+      .get('/test-route?key=mw_client')
+      .expect(429);
+
+    expect(response.body).toEqual({
+      error: 'Too Many Requests',
+      message: 'Rate limit exceeded. Please try again later.',
+      key: 'mw_client',
+      tokensRemaining: 0,
+      capacity: 2,
+      refillRate: 10,
+      resetTime: 1000001,
+    });
+    expect(response.headers['x-ratelimit-limit']).toBe('2');
+    expect(response.headers['x-ratelimit-remaining']).toBe('0');
   });
 });
