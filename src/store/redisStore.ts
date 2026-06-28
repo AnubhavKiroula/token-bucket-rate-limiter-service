@@ -214,6 +214,18 @@ export class RedisStore {
   }
 
   /**
+   * Reset all telemetry and metrics counters.
+   */
+  public async resetMetrics(): Promise<void> {
+    const multi = this.client.multi();
+    multi.del('stats:global');
+    multi.del('stats:clients:total');
+    multi.del('stats:clients:allowed');
+    multi.del('stats:clients:denied');
+    await multi.exec();
+  }
+
+  /**
    * Clear all database data (useful for integration tests)
    */
   public async flushAll(): Promise<void> {
