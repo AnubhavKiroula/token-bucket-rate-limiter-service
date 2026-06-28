@@ -47,7 +47,7 @@ This service is deployed in production and can be tested live without any local 
 
 ### Live URLs:
 * **Observability Dashboard**: [https://rate-limiter-service-qa2w.onrender.com/admin/dashboard](https://rate-limiter-service-qa2w.onrender.com/admin/dashboard)
-  * *Credentials*: `admin` / `anubhav123`
+  * *Credentials*: `admin` / `Anubhav#2007`
 * **Health Check**: [https://rate-limiter-service-qa2w.onrender.com/health](https://rate-limiter-service-qa2w.onrender.com/health)
 * **Metrics Exporter**: [https://rate-limiter-service-qa2w.onrender.com/metrics](https://rate-limiter-service-qa2w.onrender.com/metrics)
   * *Credentials*: `admin` / `anubhav123`
