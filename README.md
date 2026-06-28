@@ -1,5 +1,7 @@
 # Token Bucket Rate Limiter Service
 
+[![CI Status](https://github.com/AnubhavKiroula/token-bucket-rate-limiter-service/actions/workflows/ci.yml/badge.svg)](https://github.com/AnubhavKiroula/token-bucket-rate-limiter-service/actions)
+
 A standalone, production-ready backend service implementing a highly performant and scalable Token Bucket Rate Limiting algorithm. The service features persistence, multi-instance safety (distributed environments), comprehensive testing (unit & integration), and load testing configurations.
 
 ---
@@ -13,6 +15,7 @@ A standalone, production-ready backend service implementing a highly performant 
 - **Logging / Observability**: Structured JSON logging (Morgan for development HTTP, JSON format for runtime events)
 - **Testing Framework**: Jest & Supertest
 - **Containerization**: Docker & Docker Compose
+- **CI/CD Automation**: GitHub Actions (runs automated build and test pipeline on every push and PR)
 
 ---
 
@@ -29,11 +32,14 @@ A standalone, production-ready backend service implementing a highly performant 
   - Integrate Redis for multi-instance distributed token bucket synchronization.
   - Ensure thread/concurrency safety (atomic Redis operations via Lua scripting).
   - Implement Basic-Auth-secured `/admin/config` endpoint to persist client-specific overrides.
-- [x] **Phase 4: Load Testing & Performance Optimization**
-  - Implement standard rate-limit headers on 200/429 responses.
-  - Implement Prometheus metrics exporting (`GET /metrics`).
-  - Build live telemetry SSE monitoring dashboard (`GET /admin/dashboard`).
-  - Add Artillery high-concurrency performance benchmark scripts.
+- [x] **Phase 4: Headers & Load Testing**
+  - Expose rate limit status headers on all checks and API endpoints.
+  - Configure Artillery load tests simulating 500+ concurrent requests/sec.
+  - Build live monitoring telemetry dashboard (`/admin/dashboard`) and JSON analytics endpoint.
+- [x] **Phase 5: Dashboard & CI/CD**
+  - Refactor metrics endpoint to dedicated routes and enforce Basic Auth.
+  - Integrate live metrics reset controls with confirmation modal and toast notifications.
+  - Orchestrate Redis service container in GitHub Actions to automate E2E test runs.
 
 ---
 
@@ -181,11 +187,14 @@ curl -i -X POST -u admin:secret123 \
 
 ---
 
-### 3. Prometheus Metrics Endpoint
+### 3. Prometheus Metrics Endpoint (Admin Only)
 Exposes rates, allowed, and denied counts formatted in standard Prometheus plain text format. Used for scraping by monitoring systems like Prometheus and Grafana.
 
 * **Endpoint**: `/metrics`
 * **Method**: `GET`
+* **Authentication**: HTTP Basic Auth (Credentials: `ADMIN_USERNAME` / `ADMIN_PASSWORD`, default: `admin` / `secret123`)
+* **Headers**:
+  * `Authorization`: `Basic <base64-credentials>`
 * **Response Content-Type**: `text/plain`
 
 #### Example Output:
@@ -194,13 +203,13 @@ Exposes rates, allowed, and denied counts formatted in standard Prometheus plain
 # TYPE rate_limiter_requests_total counter
 rate_limiter_requests_total 124
 
-# HELP rate_limiter_requests_allowed The total number of allowed rate limiter requests.
-# TYPE rate_limiter_requests_allowed counter
-rate_limiter_requests_allowed 100
+# HELP rate_limiter_requests_allowed_total The total number of allowed rate limiter requests.
+# TYPE rate_limiter_requests_allowed_total counter
+rate_limiter_requests_allowed_total 100
 
-# HELP rate_limiter_requests_denied The total number of denied rate limiter requests.
-# TYPE rate_limiter_requests_denied counter
-rate_limiter_requests_denied 24
+# HELP rate_limiter_requests_denied_total The total number of denied rate limiter requests.
+# TYPE rate_limiter_requests_denied_total counter
+rate_limiter_requests_denied_total 24
 
 # HELP rate_limiter_client_requests_total The total requests per client.
 # TYPE rate_limiter_client_requests_total counter
@@ -209,19 +218,33 @@ rate_limiter_client_requests_total{client="client_1"} 100
 
 #### Curl Example:
 ```bash
-curl -i http://localhost:3000/metrics
+curl -i -u admin:secret123 http://localhost:3000/metrics
 ```
 
 ---
 
 ### 4. Observability Monitoring Dashboard (Admin Only)
-A gorgeous, dark-themed, glassmorphic monitoring dashboard powered by Chart.js. Uses Server-Sent Events (SSE) to push live allowed/denied rates and active client statistics to your browser without polling overhead.
+A gorgeous, dark-themed, glassmorphic monitoring dashboard powered by Chart.js. Uses Server-Sent Events (SSE) to push live allowed/denied rates and active client statistics to your browser without polling overhead. Includes action triggers to wipe statistics on-demand.
 
 * **Endpoint**: `/admin/dashboard`
 * **Method**: `GET`
 * **Authentication**: HTTP Basic Auth (`admin` / `secret123`)
 
-Open `http://localhost:3000/admin/dashboard` in your browser to view live charts and tables.
+Open `http://localhost:3000/admin/dashboard` in your browser to view live charts, client leaderboards, and trigger database-wide metrics reset requests.
+
+---
+
+### 5. Reset Statistics (Admin Only)
+Clears all telemetry, request counters, and active client statistics in Redis.
+
+* **Endpoint**: `/admin/stats/reset`
+* **Method**: `POST`
+* **Authentication**: HTTP Basic Auth (`admin` / `secret123`)
+
+#### Curl Example:
+```bash
+curl -i -X POST -u admin:secret123 http://localhost:3000/admin/stats/reset
+```
 
 ---
 
