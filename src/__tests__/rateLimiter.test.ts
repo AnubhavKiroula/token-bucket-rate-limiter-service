@@ -303,3 +303,42 @@ describe('rateLimiterMiddleware Integration Tests', () => {
     expect(response.headers['x-ratelimit-remaining']).toBe('0');
   });
 });
+
+describe('Prometheus Metrics Integration Tests', () => {
+  beforeEach(() => {
+    (redisStore as any).clearMocks();
+  });
+
+  it('should block unauthenticated access to /metrics with 401', async () => {
+    const response = await request(app)
+      .get('/metrics')
+      .expect(401);
+
+    expect(response.headers['www-authenticate']).toBe('Basic realm="Admin Access"');
+    expect(response.body).toEqual({
+      error: 'Unauthorized',
+      message: 'Authentication required. Please provide credentials via Basic Auth.',
+    });
+  });
+
+  it('should allow access to /metrics when provided correct basic auth credentials', async () => {
+    const token = Buffer.from('admin:secret123').toString('base64');
+    
+    // Record mock decisions in mock store
+    await redisStore.recordDecision('test_client', true);
+    await redisStore.recordDecision('test_client', false);
+
+    const response = await request(app)
+      .get('/metrics')
+      .set('Authorization', `Basic ${token}`)
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.text).toContain('rate_limiter_requests_total 2');
+    expect(response.text).toContain('rate_limiter_requests_allowed_total 1');
+    expect(response.text).toContain('rate_limiter_requests_denied_total 1');
+    expect(response.text).toContain('rate_limiter_client_requests_total{client="test_client"} 2');
+    expect(response.text).toContain('rate_limiter_client_requests_allowed_total{client="test_client"} 1');
+    expect(response.text).toContain('rate_limiter_client_requests_denied_total{client="test_client"} 1');
+  });
+});
