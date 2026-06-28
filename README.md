@@ -351,6 +351,16 @@ This repository integrates automated workflows using **GitHub Actions**:
 
 ---
 
+## 🔒 Production Security Guidelines
+
+To evaluate this service during developer reviews or recruitment trials, default credentials are listed in this document. However, when deploying this rate limiter in production environments, ensure you follow these security best practices:
+
+1. **Never Hardcode Credentials**: Do not commit administrative credentials, API secrets, or passwords directly to your Git repository.
+2. **Inject Variables via Environment**: Configure `ADMIN_USERNAME` and `ADMIN_PASSWORD` dynamically as environment variables on Render (or your host provider's dashboard) to keep them secure.
+3. **Rotate Secrets**: Regularly change database credentials (`REDIS_URL`) and administration passwords to prevent unauthorized access.
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
