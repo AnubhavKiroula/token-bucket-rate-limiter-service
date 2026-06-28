@@ -79,6 +79,12 @@
       letter-spacing: -0.025em;
     }
 
+    .actions-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
     .connection-status {
       font-size: 0.875rem;
       font-weight: 500;
@@ -90,6 +96,31 @@
       display: flex;
       align-items: center;
       gap: 0.5rem;
+    }
+
+    .btn-reset {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fc8181;
+      padding: 0.5rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-reset:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-reset:active {
+      transform: translateY(0);
     }
 
     .grid-stats {
@@ -227,6 +258,119 @@
       background: rgba(239, 68, 68, 0.1);
       color: var(--accent-red);
     }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 7, 13, 0.8);
+      backdrop-filter: blur(6px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.2s ease-out;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+      opacity: 1;
+    }
+
+    .modal {
+      background: #0d1321;
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 2.25rem;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      transform: translateY(20px);
+      transition: transform 0.2s ease-out;
+    }
+
+    .modal-overlay.show .modal {
+      transform: translateY(0);
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: var(--text-main);
+    }
+
+    .modal-body {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      margin-bottom: 1.75rem;
+      line-height: 1.5;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .btn-confirm {
+      background: var(--accent-red);
+      border: none;
+      color: white;
+      padding: 0.6rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn-confirm:hover {
+      opacity: 0.9;
+    }
+
+    .btn-cancel {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.6rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-cancel:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: rgba(16, 185, 129, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: white;
+      padding: 1rem 1.75rem;
+      border-radius: 12px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.25);
+      z-index: 1001;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -236,9 +380,17 @@
         <div class="logo-dot"></div>
         <h1>Rate Limiter Observability</h1>
       </div>
-      <div class="connection-status" id="connectionStatus">
-        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:#3b82f6;"></span>
-        SSE Stream Connecting...
+      <div class="actions-container">
+        <button class="btn-reset" id="btnReset">
+          <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+          </svg>
+          Reset Statistics
+        </button>
+        <div class="connection-status" id="connectionStatus">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:#3b82f6;"></span>
+          SSE Stream Connecting...
+        </div>
       </div>
     </header>
 
@@ -295,6 +447,21 @@
     </div>
   </div>
 
+  <!-- Reset Confirmation Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-title">Reset All Statistics?</div>
+      <div class="modal-body">This will permanently clear all global request and client counters in Redis. This action cannot be undone.</div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="btnCancel">Cancel</button>
+        <button class="btn-confirm" id="btnConfirm">Yes, Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">Metrics reset successfully</div>
+
   <script>
     const connectionStatus = document.getElementById('connectionStatus');
     const valTotal = document.getElementById('valTotal');
@@ -303,6 +470,12 @@
     const pctAllowed = document.getElementById('pctAllowed');
     const pctDenied = document.getElementById('pctDenied');
     const clientTableBody = document.querySelector('#clientTable tbody');
+
+    const btnReset = document.getElementById('btnReset');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const btnCancel = document.getElementById('btnCancel');
+    const btnConfirm = document.getElementById('btnConfirm');
+    const toast = document.getElementById('toast');
 
     // 1. Initialize Chart.js
     const ctx = document.getElementById('liveChart').getContext('2d');
@@ -401,8 +574,8 @@
       }
 
       liveChart.data.labels.push(nowStr);
-      liveChart.data.datasets[0].data.push(diffAllowed);
-      liveChart.data.datasets[1].data.push(diffDenied);
+      liveChart.data.datasets[0].data.push(diffAllowed >= 0 ? diffAllowed : 0);
+      liveChart.data.datasets[1].data.push(diffDenied >= 0 ? diffDenied : 0);
       liveChart.update('none'); // Update without full recalculation transition for smooth flow
 
       // C. Update Client Table
@@ -416,7 +589,7 @@
       if (clientKeys.length === 0) {
         clientTableBody.innerHTML = `
           <tr>
-            <td colspan="4" style="text-align: center; color: var(--text-muted);">No client traffic detected.</td>
+            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem 0;">No client traffic detected.</td>
           </tr>
         `;
         return;
@@ -441,6 +614,52 @@
     function escapeHtml(str) {
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
+
+    // 3. Reset Button Action & Modal UI
+    btnReset.addEventListener('click', () => {
+      modalOverlay.style.display = 'flex';
+      // Trigger reflow for transition
+      modalOverlay.offsetHeight;
+      modalOverlay.classList.add('show');
+    });
+
+    const closeModal = () => {
+      modalOverlay.classList.remove('show');
+      setTimeout(() => {
+        modalOverlay.style.display = 'none';
+      }, 200);
+    };
+
+    btnCancel.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+
+    btnConfirm.addEventListener('click', async () => {
+      closeModal();
+      try {
+        const response = await fetch('/admin/stats/reset', { method: 'POST' });
+        if (response.ok) {
+          // Reset client state counters to prevent negative chart spikes
+          lastTotal = 0;
+          lastAllowed = 0;
+          lastDenied = 0;
+          
+          liveChart.data.labels = [];
+          liveChart.data.datasets[0].data = [];
+          liveChart.data.datasets[1].data = [];
+          liveChart.update();
+
+          // Show Toast Notification
+          toast.classList.add('show');
+          setTimeout(() => {
+            toast.classList.remove('show');
+          }, 3000);
+        }
+      } catch (err) {
+        console.error('Failed to reset statistics:', err);
+      }
+    });
   </script>
 </body>
 </html>
