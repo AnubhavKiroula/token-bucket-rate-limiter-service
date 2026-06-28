@@ -232,6 +232,8 @@ A gorgeous, dark-themed, glassmorphic monitoring dashboard powered by Chart.js. 
 
 Open `http://localhost:3000/admin/dashboard` in your browser to view live charts, client leaderboards, and trigger database-wide metrics reset requests.
 
+![Dashboard Preview](assets/dashboard.png)
+
 ---
 
 ### 5. Reset Statistics (Admin Only)
@@ -315,3 +317,16 @@ We use **Artillery** to benchmark the service and prove its correctness under lo
    ```
 3. Watch the real-time throughput metrics update dynamically on the dashboard by opening `http://localhost:3000/admin/dashboard` in your browser.
 
+---
+
+## 🔄 CI/CD Automation
+
+This repository integrates automated workflows using **GitHub Actions**:
+- **Continuous Integration (`.github/workflows/ci.yml`)**: Spins up a Matrix build across Node.js `18.x`, `20.x`, and `22.x`. It mounts a real containerized Redis alpine service on port 6379, compiles TypeScript source, and executes the entire Jest test suite on every Push and Pull Request targeting `main`.
+- **Status Badge**: Configured at the top of the README to indicate the current status of the master branch workflow.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
