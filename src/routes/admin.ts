@@ -114,6 +114,36 @@ router.get('/stats/live', (req: Request, res: Response): void => {
 });
 
 /**
+ * Reset all rate limiter metrics in Redis (Admin only).
+ */
+router.post('/stats/reset', async (req: Request, res: Response): Promise<void> => {
+  try {
+    await redisStore.resetMetrics();
+    
+    const instanceId = process.env.INSTANCE_ID || 'localhost';
+    console.log(JSON.stringify({
+      level: 'info',
+      event: 'admin_metrics_reset',
+      message: 'Rate limiter statistics have been reset',
+      instanceId,
+    }));
+
+    res.status(200).json({ success: true, message: 'Metrics reset successfully' });
+  } catch (err: any) {
+    console.error(JSON.stringify({
+      level: 'error',
+      event: 'admin_metrics_reset_error',
+      message: err.message || String(err),
+    }));
+
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to reset rate limiter statistics.',
+    });
+  }
+});
+
+/**
  * Serve the monitoring dashboard HTML.
  */
 router.get('/dashboard', (req: Request, res: Response): void => {
