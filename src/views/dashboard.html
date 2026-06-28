@@ -697,6 +697,75 @@
         console.error('Failed to reset statistics:', err);
       }
     });
+
+    // 4. Request Simulator Sandbox Client Script
+    const simClientIdInput = document.getElementById('simClientId');
+    const simCapacityInput = document.getElementById('simCapacity');
+    const simRefillRateInput = document.getElementById('simRefillRate');
+    const btnSimSingle = document.getElementById('btnSimSingle');
+    const btnSimBurst = document.getElementById('btnSimBurst');
+    const simConsole = document.getElementById('simConsole');
+
+    const updateConsole = (text, type = 'info') => {
+      const timestamp = new Date().toLocaleTimeString([], { hour12: false });
+      let color = '#9ca3af'; // default gray
+      if (type === 'allow') color = '#10b981'; // green
+      if (type === 'deny') color = '#ef4444'; // red
+      if (type === 'error') color = '#fbbf24'; // yellow
+      
+      const newline = `[${timestamp}] <span style="color: ${color}">${text}</span>\n`;
+      simConsole.innerHTML = newline + simConsole.innerHTML;
+    };
+
+    const runSimCheck = async (clientId, capacity, refillRate) => {
+      try {
+        // Call the public /check endpoint.
+        const url = `/check?key=${encodeURIComponent(clientId)}&capacity=${capacity}&refillRate=${refillRate}`;
+        const response = await fetch(url, { method: 'GET' });
+        
+        if (!response.ok) {
+          const errData = await response.json();
+          updateConsole(`ERROR: ${errData.message || 'Server returned status ' + response.status}`, 'error');
+          return;
+        }
+
+        const data = await response.json();
+        const decisionText = `Decision: ${data.decision} | Remaining: ${Math.floor(data.tokensRemaining)}/${data.capacity} | Refill: ${data.refillRate}/s`;
+        updateConsole(decisionText, data.decision === 'ALLOW' ? 'allow' : 'deny');
+      } catch (err) {
+        updateConsole(`Network Error: ${err.message || String(err)}`, 'error');
+      }
+    };
+
+    btnSimSingle.addEventListener('click', async () => {
+      const clientId = simClientIdInput.value.trim() || 'sandbox-client';
+      const capacity = parseInt(simCapacityInput.value, 10) || 10;
+      const refillRate = parseFloat(simRefillRateInput.value) || 2;
+      
+      btnSimSingle.disabled = true;
+      updateConsole(`Triggering single request check...`);
+      await runSimCheck(clientId, capacity, refillRate);
+      btnSimSingle.disabled = false;
+    });
+
+    btnSimBurst.addEventListener('click', async () => {
+      const clientId = simClientIdInput.value.trim() || 'sandbox-client';
+      const capacity = parseInt(simCapacityInput.value, 10) || 10;
+      const refillRate = parseFloat(simRefillRateInput.value) || 2;
+
+      btnSimBurst.disabled = true;
+      updateConsole(`Triggering rapid burst of 12 requests...`);
+      
+      // Trigger 12 requests rapidly with a 30ms interval to showcase visual flow
+      for (let i = 1; i <= 12; i++) {
+        runSimCheck(clientId, capacity, refillRate);
+        await new Promise(r => setTimeout(r, 30));
+      }
+      
+      setTimeout(() => {
+        btnSimBurst.disabled = false;
+      }, 500);
+    });
   </script>
 </body>
 </html>
