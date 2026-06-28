@@ -50,20 +50,20 @@ This service is deployed in production and can be tested live without any local 
   * *Credentials*: `admin` / `Anubhav#2007`
 * **Health Check**: [https://rate-limiter-service-qa2w.onrender.com/health](https://rate-limiter-service-qa2w.onrender.com/health)
 * **Metrics Exporter**: [https://rate-limiter-service-qa2w.onrender.com/metrics](https://rate-limiter-service-qa2w.onrender.com/metrics)
-  * *Credentials*: `admin` / `anubhav123`
+  * *Credentials*: `admin` / `Anubhav#2007`
 
-### Sandbox Experiments:
+### 🎮 Embedded Request Simulator Sandbox:
 
-1. **Trigger ALLOW**:
-   * Open [https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user](https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user) in your browser.
-   * Refresh the tab slowly. You will see `"decision": "ALLOW"` and the remaining token count decrease.
-   * Check the live dashboard—you will see allowed request counts increase and the green line on the chart spike.
+Instead of opening new browser tabs or running shell scripts, you can simulate requests **directly inside the dashboard interface** to watch counts and charts update in real-time:
 
-2. **Trigger DENY**:
-   * Open [https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user&capacity=3&refillRate=0.5](https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user&capacity=3&refillRate=0.5) in your browser.
-   * *Why this URL?* This overrides the default capacity to 3 and refills only 0.5 tokens/sec (1 token every 2 seconds).
-   * Refresh the tab **4 times quickly**.
-   * You will see the response change to `"decision": "DENY"`. On the dashboard, the "Denied Requests" count will increase and the red line on the chart will spike.
+1. **Open the Dashboard**: Navigate to the [Observability Dashboard](https://rate-limiter-service-qa2w.onrender.com/admin/dashboard) and log in.
+2. **Trigger ALLOW**: 
+   * Locate the **Request Simulator Sandbox** card in the right-hand panel.
+   * Click the **Send Request (1x)** button. You will see a green `ALLOW` decision logged in the simulator console, your Allowed Requests count increase, and a green throughput spike appear on the line chart.
+3. **Trigger DENY**:
+   * Click the **Send Burst (12x)** button. This will launch a rapid sequence of 12 requests, instantly exhausting the bucket capacity.
+   * You will see the console output change to red `DENY` blocks, the Denied Requests count increase, and a red blocked traffic spike plot on the line chart.
+4. **Customize overrides**: Change the Client ID, Capacity, or Refill Rate inputs in the panel, then trigger requests to watch the rate-limiting algorithm compute different client limits on the fly!
 
 ---
 
