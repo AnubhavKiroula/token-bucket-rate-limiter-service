@@ -41,6 +41,30 @@ A standalone, production-ready backend service implementing a highly performant 
   - Integrate live metrics reset controls with confirmation modal and toast notifications.
   - Orchestrate Redis service container in GitHub Actions to automate E2E test runs.
 
+## 🌐 Live Demo & Sandbox Testing
+
+This service is deployed in production and can be tested live without any local setup.
+
+### Live URLs:
+* **Observability Dashboard**: [https://rate-limiter-service-qa2w.onrender.com/admin/dashboard](https://rate-limiter-service-qa2w.onrender.com/admin/dashboard)
+  * *Credentials*: `admin` / `anubhav123`
+* **Health Check**: [https://rate-limiter-service-qa2w.onrender.com/health](https://rate-limiter-service-qa2w.onrender.com/health)
+* **Metrics Exporter**: [https://rate-limiter-service-qa2w.onrender.com/metrics](https://rate-limiter-service-qa2w.onrender.com/metrics)
+  * *Credentials*: `admin` / `anubhav123`
+
+### Sandbox Experiments:
+
+1. **Trigger ALLOW**:
+   * Open [https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user](https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user) in your browser.
+   * Refresh the tab slowly. You will see `"decision": "ALLOW"` and the remaining token count decrease.
+   * Check the live dashboard—you will see allowed request counts increase and the green line on the chart spike.
+
+2. **Trigger DENY**:
+   * Open [https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user&capacity=3&refillRate=0.5](https://rate-limiter-service-qa2w.onrender.com/check?key=demo-user&capacity=3&refillRate=0.5) in your browser.
+   * *Why this URL?* This overrides the default capacity to 3 and refills only 0.5 tokens/sec (1 token every 2 seconds).
+   * Refresh the tab **4 times quickly**.
+   * You will see the response change to `"decision": "DENY"`. On the dashboard, the "Denied Requests" count will increase and the red line on the chart will spike.
+
 ---
 
 ## 🚀 Getting Started
